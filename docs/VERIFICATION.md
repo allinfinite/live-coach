@@ -86,7 +86,7 @@ The built0.1.2 CLI separately decoded the real synthetic boundary WAV using read
 
 The installed native0.1.2 window displayed local coach ready, idle timer10:00, conversation consent unchecked, empty transcript, Read aloud disabled and local voice runtime ready for enrollment. No enrolled user voice existed during verification. The user must explicitly record and save their own reference to evaluate resemblance. The optional model is already installed on this Mac; no startup model download or audio capture occurs.
 
-Development app packaging succeeded. Installed app and freshly extracted ZIP pass strict deep signature verification using ad-hoc signing; notarization remains unavailable. Original Meetily snapshot still reports26files andzerochanges. Evidence: `voice-rust-tests-final.log`, `voice-python-tests.log`, `voice-ui-tests.json`, `voice-coaching-regression.log`, `voice-meetily-check.json`, `voice-package.log`, `local-voice/rust-playback-smoke.json`.
+Development app packaging succeeded. Installed app and freshly extracted ZIP pass strict deep signature verification using ad-hoc signing; notarization remains unavailable. Original Meetily snapshot still reports26files and zerochanges. Evidence: `voice-rust-tests-final.log`, `voice-python-tests.log`, `voice-ui-tests.json`, `voice-coaching-regression.log`, `voice-meetily-check.json`, `voice-package.log`, `local-voice/rust-playback-smoke.json`.
 
 
 ## Personal coaching expansion — 0.1.3
@@ -96,3 +96,22 @@ Development app packaging succeeded. Installed app and freshly extracted ZIP pas
 Packaged0.1.3 real Parakeet→finalized segment ingress→local Ollama passed:1.15s ASR and2.95s coaching on the synthetic boundary fixture. This test did not capture microphone/system audio. Native startup shows Personal coach, goal/intention fields, local coach ready, stopped capture and the existing enrolled voice ready. Saved voice file size/modification metadata remained unchanged; no private sample was copied into source or evidence. Original Meetily26file snapshot remains unchanged.
 
 Public export contains only reviewedsource/docs/assets and passes credential-pattern and personal-absolute-path checks. No voice profiles, models, recordings, personal transcripts, Codexhistory or local evidence are included. Source is published at https://github.com/allinfinite/live-coach; the project page is https://dnalevity.com/live-coach. Dot messaging, automatic call participation and command execution remain unimplemented; the included helper only prepares a local reviewable draft.
+
+
+## Reviewed Codex handoffs — 0.2.0
+
+66 Rust tests pass; two existing native audio/voice probes remain opt-in. Forty Codex browser assertions and 123 existing UI/voice/warm-up/mode assertions pass. Six legacy handoff-helper tests and 8 voice-engine contract tests pass. Nine real Codex isolation checks exercise project-only reads, denied sibling/Codex-home reads, restricted thread-profile acknowledgment, disabled command networking and absent MCP startup markers.
+
+The actual packaged app-server integration used the existing Codex sign-in and real OpenAI inference in a disposable synthetic project: Plan returned both selected facts; Task created the exact requested result.txt; reused review identifiers were rejected; immediate startup cancellation disconnected cleanly. The installed native app independently completed Connect, file selection, full review, explicit Send, streamed result and Disconnect. Cold startup had zero child processes before Connect and audio remained stopped. Saved voice-profile size/modification metadata and the 26-file Meetily snapshot remain unchanged.
+
+Ad-hoc signed installed app and freshly extracted development ZIP pass strict deep signature verification. Notarization credentials remain unavailable. This release was tested against Codex CLI 0.161.0 on Apple Silicon macOS. Other CLI versions fail closed if required configuration/profile acknowledgments are unavailable. ChatGPT authentication was exercised; API-key routing is unit-tested but not exercised against a paid API account. Live history selection and direct Dot messaging remain unavailable.
+
+Real integration found and fixed auth-aware endpoint routing (ChatGPT sign-ins need the Codex backend rather than the public API endpoint), inherited custom command environments, cancellation during initialization, stale approval/turn handling and reviewed-folder identity changes. Broad legacy sandbox overrides are deliberately not used. Plan cannot approve scope expansion; Task-mode one-time exception approvals require careful user review.
+
+Reproduce the controlled real provider test, which uses account inference and creates/deletes only its own synthetic project:
+
+```sh
+./src-tauri/target/debug/live-coach --codex-self-test
+```
+
+Local verification evidence is excluded from the public repository. Reproducible test code and sanitized test summaries are included.

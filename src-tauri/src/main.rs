@@ -1,7 +1,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod capture;
 mod coach;
+mod codex;
+mod codex_bridge;
+mod codex_config;
+mod codex_verification;
 mod models;
+mod project_context;
 mod storage;
 mod upstream;
 mod verification;
@@ -47,6 +52,7 @@ struct Session {
     settings: Option<Settings>,
 }
 struct AppState {
+    codex: Arc<codex_bridge::Bridge>,
     coach: Arc<Coach>,
     warmup: Arc<warmup::Warmup>,
     voice: Arc<voice::Voice>,
@@ -55,6 +61,63 @@ struct AppState {
     session: Mutex<Session>,
     operation: Mutex<()>,
     retained: Arc<std::sync::Mutex<Option<Vec<Segment>>>>,
+}
+#[tauri::command]
+async fn codex_status(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<codex::CodexStatus, String> {
+    Ok(state.codex.status())
+}
+#[tauri::command]
+async fn codex_connect(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<serde_json::Value, String> {
+    state.codex.connect().await
+}
+#[tauri::command]
+async fn codex_project(path: String) -> Result<project_context::Project, String> {
+    tokio::task::spawn_blocking(move || project_context::list(&path))
+        .await
+        .map_err(|_| "Project inspection failed")?
+}
+#[tauri::command]
+async fn codex_prepare(
+    state: tauri::State<'_, Arc<AppState>>,
+    project: String,
+    files: Vec<String>,
+    task: String,
+    model: String,
+    mode: project_context::Mode,
+) -> Result<project_context::Review, String> {
+    state.codex.prepare(project, files, task, model, mode)
+}
+#[tauri::command]
+async fn codex_send(
+    state: tauri::State<'_, Arc<AppState>>,
+    review_id: String,
+) -> Result<serde_json::Value, String> {
+    state.codex.send(&review_id).await
+}
+#[tauri::command]
+async fn codex_cancel(
+    state: tauri::State<'_, Arc<AppState>>,
+    run_id: String,
+) -> Result<(), String> {
+    state.codex.cancel(&run_id).await
+}
+#[tauri::command]
+async fn codex_approval(
+    state: tauri::State<'_, Arc<AppState>>,
+    run_id: String,
+    approval_id: String,
+    decision: codex::ApprovalDecision,
+) -> Result<(), String> {
+    state.codex.approval(&run_id, &approval_id, decision).await
+}
+#[tauri::command]
+async fn codex_disconnect(state: tauri::State<'_, Arc<AppState>>) -> Result<(), String> {
+    state.codex.disconnect().await;
+    Ok(())
 }
 const KEY_SERVICE: &str = "com.dnalevity.livecoach";
 fn cloud_key() -> Option<String> {
@@ -381,6 +444,9 @@ fn load_history() -> Result<Vec<serde_json::Value>, String> {
 }
 fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
+    if codex_verification::run_if_requested() {
+        return;
+    }
     if verification::run_if_requested() {
         return;
     }
@@ -388,6 +454,7 @@ fn main() {
  .setup(|app|{
   storage::expire().map_err(std::io::Error::other)?;
   let handle=app.handle().clone();
+  let codex_handle=handle.clone();
   let retained:Arc<std::sync::Mutex<Option<Vec<Segment>>>>=Arc::new(std::sync::Mutex::new(None));let sink_retained=retained.clone();
   let latest_suggestion=Arc::new(std::sync::Mutex::new(None));let sink_suggestion=latest_suggestion.clone();
   let sink:coach::EventSink=Arc::new(move|event|{
@@ -395,7 +462,8 @@ fn main() {
    if let CoachEvent::Transcript{id,text,speaker,timestamp_ms}=&event {if let Some(segments)=sink_retained.lock().unwrap().as_mut(){if segments.len()>=10000{segments.remove(0);}segments.push(Segment{id:id.clone(),text:text.clone(),speaker:speaker.clone(),timestamp_ms:*timestamp_ms});}}
    let _=handle.emit("coach-event",event);
   });
-  let state=Arc::new(AppState{coach:Coach::new(CoachSettings::default(),sink),warmup:warmup::Warmup::new(),voice:voice::Voice::new(),speaking:std::sync::atomic::AtomicBool::new(false),latest_suggestion,session:Mutex::new(Session::default()),operation:Mutex::new(()),retained});
+  let codex=codex_bridge::Bridge::new(Arc::new(move|e|{let _=codex_handle.emit("codex-event",e);}));
+  let state=Arc::new(AppState{codex,coach:Coach::new(CoachSettings::default(),sink),warmup:warmup::Warmup::new(),voice:voice::Voice::new(),speaking:std::sync::atomic::AtomicBool::new(false),latest_suggestion,session:Mutex::new(Session::default()),operation:Mutex::new(()),retained});
   app.manage(state.clone());
   let app_handle=app.handle().clone();
   tauri::async_runtime::spawn(async move {
@@ -408,8 +476,8 @@ fn main() {
   });
   Ok(())
  })
- .invoke_handler(tauri::generate_handler![voice_status,start_voice_reference,finish_voice_reference,cancel_voice_reference,forget_voice,speak_suggestion,preview_voice,stop_voice,environment,warm_ollama,cancel_warmup,start_session,stop_session,quick_action,delete_transcripts,save_api_key,load_history])
- .on_window_event(|window,event|{if let tauri::WindowEvent::CloseRequested{api,..}=event{api.prevent_close();let state=window.state::<Arc<AppState>>().inner().clone();let handle=window.clone();tauri::async_runtime::spawn(async move{let _=stop(&state).await;let _=handle.destroy();handle.app_handle().exit(0);});}})
+ .invoke_handler(tauri::generate_handler![codex_status,codex_connect,codex_project,codex_prepare,codex_send,codex_cancel,codex_approval,codex_disconnect,voice_status,start_voice_reference,finish_voice_reference,cancel_voice_reference,forget_voice,speak_suggestion,preview_voice,stop_voice,environment,warm_ollama,cancel_warmup,start_session,stop_session,quick_action,delete_transcripts,save_api_key,load_history])
+ .on_window_event(|window,event|{if let tauri::WindowEvent::CloseRequested{api,..}=event{api.prevent_close();let state=window.state::<Arc<AppState>>().inner().clone();let handle=window.clone();tauri::async_runtime::spawn(async move{let _=tokio::join!(state.codex.disconnect(),stop(&state));let _=handle.destroy();handle.app_handle().exit(0);});}})
  .build(tauri::generate_context!()).expect("Live Coach failed to launch");
     let quitting = Arc::new(std::sync::atomic::AtomicBool::new(false));
     application.run(move |app, event| {
@@ -419,9 +487,11 @@ fn main() {
                 let state = app.state::<Arc<AppState>>().inner().clone();
                 let handle = app.clone();
                 tauri::async_runtime::spawn(async move {
-                    state.voice.shutdown().await;
-                    state.warmup.cancel().await;
-                    let _ = stop(&state).await;
+                    let _ = tokio::join!(state.codex.disconnect(), async {
+                        state.voice.shutdown().await;
+                        state.warmup.cancel().await;
+                        let _ = stop(&state).await;
+                    });
                     handle.exit(0);
                 });
             }

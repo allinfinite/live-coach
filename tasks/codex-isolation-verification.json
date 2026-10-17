@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "checks": {
+    "inside_read": true,
+    "outside_read_denied": true,
+    "codex_home_read_denied": true,
+    "effective_mcp_disabled": true,
+    "effective_features_disabled": true,
+    "named_profile_acknowledged": true,
+    "network_disabled": true,
+    "global_danger_full_access_overridden": true,
+    "mcp_not_started": true
+  },
+  "inference_started": false,
+  "user_auth_read_or_copied": false
+}

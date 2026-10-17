@@ -1,55 +1,60 @@
-# Codex and Dot integration
+# Reviewed Codex project handoffs
 
-Status: researched integration design plus a tested, local-only handoff draft utility. Live Coach does **not** currently read Codex history, send tasks to Dot, or execute commands. Personal coaching is the first product priority.
+Live Coach can connect to the installed Codex CLI, preview selected project context, and send a task after you review its exact prompt and access. The connection is optional and starts only when you click **Connect Codex**. Conversation capture and voice playback do not connect to Codex or authorize tasks.
 
-## Available interfaces
+## First use
 
-The installed Codex CLI was inspected on 2026-10-16 (0.161.0): `app-server`, `exec`, `resume`, `queue`, and protocol schema generation are available. CLI availability does not establish account access or successful inference.
+1. Open Codex and sign in, or run `codex login` in Terminal. Live Coach reuses that Codex-managed login without reading or copying authentication files.
+2. Open Live Coach's **Codex projects** section and click **Connect Codex**.
+3. Enter the path of one project folder (`~/Code/my-project` also works) and load its file list. Select only the files needed for the task. Select a model from those returned by your Codex installation.
+4. Choose **Plan** for advice without project changes, or **Task** to let Codex make changes within that project. Describe the desired outcome.
+5. Prepare the review. Read the project, provider, access, complete prompt and selected file contents. Click **Send reviewed task** to begin.
+6. Read the streamed result. If Codex requests approval, inspect the command or proposed change before choosing **Allow once**, **Decline**, or **Cancel task**. An incomplete or truncated approval cannot be accepted.
 
-The documented app-server protocol supports stdio, initialization, thread listing/reading, starting turns, streaming events, cancellation and approval requests. Use generated bindings from the installed CLI; gate unsupported methods by version. Prefer `thread/list` scoped by selected project and `thread/read` only for a user-selected thread. Default listing filters omit some sources, so test actual desktop thread visibility. Do not parse private SQLite or rollout storage. [Official app-server protocol](https://learn.chatgpt.com/docs/app-server)
+A useful first task is: “Read these project notes and suggest three concrete next steps. Do not change any files.” Use a disposable project for your first Task-mode experiment.
 
-A child process on this computer does not imply local inference. Codex's configured provider determines where prompts go. Show the destination before forwarding conversation text.
+Codex inference uses **OpenAI through your existing Codex sign-in**. Sending a task sends its prompt and selected context off this Mac; your Codex account's usage applies. The local Ollama conversation coach remains a separate service. This integration currently requires the OpenAI provider and does not silently use custom provider endpoints.
 
-The Codex app tools available to this development chat can inspect and message tasks under user authorization; they are not automatically callable APIs inside Live Coach. Likewise, app-server is not evidence of a public Dot messaging endpoint. Dot documents messaging/calling in ChatGPT and connected Slack/Teams channels, plus iOS shortcuts; this does not establish an external macOS messaging API. [Dot messaging](https://learn.chatgpt.com/docs/dots/channels)
+## Context and review
 
-## Use the draft helper now
+The file chooser lists ordinary project text files and excludes hidden files, symbolic links, dependency/build folders, model folders and voice data. Context is limited to eight files, 32 KiB each and 64 KiB total. The review contains a snapshot of the selected text. Editing the task, project, mode, model or selection invalidates the preview; the backend issues a single-use review identifier with a five-minute lifetime.
 
-From the Live Coach source directory:
+The selected files are the **initial prompt context**. Once a reviewed task starts, Codex's sandbox permits reading the chosen project, including files you did not include in that prompt. Select a narrow project folder and review its scope accordingly. Filename exclusions in the initial file list are not a project-wide secret scanner.
+
+Live Coach does not scrape Codex's private SQLite database, rollout files, all project history, screen contents or Dot messages. Existing desktop chats are not resumed or messaged. Each handoff starts a new ephemeral app-server thread. The project folder, explicit task and chosen files provide the context for this version; Codex history selection is future work.
+
+No audio, rolling transcript or relationship profile is automatically added to a handoff. Text from a selected document, transcript or other participant is reference material, never permission to use tools.
+
+## Execution boundaries
+
+The adapter launches `codex app-server --listen stdio://` as its own child process, with no network listener. It preserves the existing `CODEX_HOME` for Codex-managed authentication and launches from a neutral Live Coach support folder. It does not modify the user's Codex configuration.
+
+A fresh named Codex permission profile grants the operating system's minimal runtime reads plus the chosen project's read access in Plan mode, or read/write access in Task mode. Command network access is disabled. The profile does not grant general home-directory reads or `/tmp` writes. The backend verifies the effective configuration and the thread's acknowledged profile before starting a turn. It never replaces this profile with the broader legacy `sandbox` or `sandboxPolicy` fields.
+
+Optional apps, MCP connectors, plugins, hooks, browser/computer tools, memory tools, skill installation, notification commands and web search are disabled for these handoffs. The adapter discovers configured MCP **names** locally, disables each one before starting the child, and checks the effective configuration afterward. An empty `mcp_servers={}` override is insufficient because Codex merges configuration tables. Connector names that this CLI cannot override unambiguously, unsupported managed layers, custom model instruction files and unverifiable permissions fail closed.
+
+Send is the authorization to run the displayed task within its displayed scope. Codex can run permitted sandboxed commands after Send; it does not ask about every safe command. Requests that require command/file approval wait for a deliberate response and support one-time approval only. Permission grants, dynamic tools and unsupported server requests are rejected rather than automatically approved. Unknown server requests are rejected; invalid protocol data stops the connection. Plan mode cannot approve scope expansion; re-review a task in Task mode to authorize changes. One-time Task approvals can authorize the displayed exception, so inspect their access and command carefully.
+
+**Cancel task** interrupts the active turn and disconnects the child. Disconnecting or closing Live Coach also terminates its Codex process group, including its active child commands. It does not terminate the user's other Codex sessions.
+
+Codex may retain account-side request data according to the user's account settings. Ephemeral threads and `history.persistence="none"` avoid normal local handoff history, but do not promise that Codex creates no operational logs. Live Coach keeps review/run state in memory and does not copy provider credentials into its own storage or public repository.
+
+## Verification
+
+The installed protocol was generated from Codex CLI **0.161.0**. Its schema advertises `untrusted` approval policy, but the actual runtime rejects explicit `approval_policy="untrusted"`; this adapter uses `on-request` and routes approvals to the user. A schema alone is not proof that a configuration works.
+
+Run the no-inference isolation check:
 
 ```sh
-python3 scripts/codex-handoff.py \
-  --project /absolute/path/to/chosen/project \
-  --goal 'Help me prepare a clear boundary for this conversation.' \
-  --context notes-for-this-conversation.md
+python3 scripts/verify-codex-isolation.py
 ```
 
-`--context` is optional and repeatable. The helper reads only those selected UTF-8 files, validates containment (including resolved symlinks), rejects hidden/key files, and limits each file to 32 KiB and the total to 64 KiB. It prints a JSON draft to stdout without saving, sending, invoking Codex or running a shell. Review the content, then paste it into a chosen Codex chat yourself. Explicitly selected ordinary files may still contain secrets: the filename checks are not a secret scanner. Avoid selecting such files. Do not save drafts in this public repository.
+It uses an expendable Codex home with no copied credentials. It executes a real sandboxed read inside the test project, verifies that a sibling outside read fails with `Operation not permitted`, then initializes the installed app-server and creates an ephemeral thread. It verifies the restricted named profile, disabled command networking, disabled connector/features and absence of a configured MCP startup marker, including when the test's global sandbox mode is `danger-full-access`. No model turn is started.
 
-Test:
+Application verification additionally covers review tokens, context traversal/symlink limits, approval denial/replay, stale events, process failure, cancellation and actual provider streaming in a disposable project. See [verification](VERIFICATION.md) for the tested build's results.
 
-```sh
-python3 -m unittest discover -s tests -p test_codex_handoff.py -v
-```
+## Dot and future modes
 
-Six tests cover exact file selection, traversal, symlink escape/hidden targets, size limits, binary rejection, and shell-like goal text being kept as data. No provider requests, history reads or task dispatch were made during verification.
+The Codex tools available inside a Codex development chat are not a public API automatically available to Live Coach. This app uses the installed app-server protocol. It does not claim a direct Dot messaging endpoint. [Official app-server protocol](https://learn.chatgpt.com/docs/app-server), [configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference), [Dot channels](https://learn.chatgpt.com/docs/dots/channels).
 
-## Proposed product flow
-
-1. Keep coaching and action execution separate. Conversation audio and other participants' words are untrusted data, never authorization to use tools.
-2. Let the user choose a project and individual context sources. Keep private relationship context separate from project context. Do not enumerate all personal history on launch or continuously scrape the screen.
-3. Produce a concrete handoff card with goal, target project/thread, selected excerpts, provider destination and requested scope. Allow edits and removal before a deliberate Send action. Selecting a project is not permission to send all its contents.
-4. Start with plan-only handoffs. A future execution mode must name its allowed directories/actions and retain Codex sandbox enforcement. The UI must render command, file-change and permission requests rather than auto-approve them. Unrecognized requests fail closed; cancellation interrupts the active turn and tears down the child process.
-5. Use the user-reviewed, bounded scope for routine implementation. Require a new deliberate action for sending messages, publishing, purchases, deletion or expanded access. Never infer authority from a cloned voice or transcript phrase.
-6. Keep an optional minimal local action log (request, scope, outcome), with deletion and retention controls. Do not persist conversation excerpts by default or bundle history/tokens with the app.
-
-Read-only sandboxing alone is not a guarantee against data disclosure or side effects through configured connectors. The future adapter needs an isolated, reviewed tool configuration, provider disclosure and tests for every exposed action. Never pass a transcript-derived string to `sh -c`, and never use sandbox/approval bypass flags.
-
-## Before enabling an app-server adapter
-
-- Verify initialization and supported schema against the installed CLI without exposing a network listener.
-- Test selected-project history filtering, pagination and thread identity; handle unavailable desktop/Dot history honestly.
-- Test denial, pending approvals, interruption, process crash, stale replies and application teardown.
-- Verify that provider credentials remain managed by Codex; do not copy authentication files into Live Coach.
-- Run an actual approved end-to-end task in an expendable project, checking sandbox boundaries and outcomes before advertising execution.
-
-Autonomous conversation continuation is a separate future mode. It needs explicit participant disclosure, turn-taking/interrupt handling, verified audio routing and a stop control. The current cloned voice is for private coaching playback; it is not permission to impersonate the user to call participants.
+Autonomous conversation continuation remains separate future work. The cloned voice currently reads private coaching suggestions; it does not speak to other call participants or approve project tasks.
