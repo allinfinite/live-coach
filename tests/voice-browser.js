@@ -1,0 +1,93 @@
+async (page) => {
+  const results=[];
+  const assert=(value,label)=>{if(!value)throw new Error(label);results.push(label);};
+  await page.addInitScript(()=>{
+    localStorage.removeItem('live-coach-preferences-v1');
+    window.calls=[];window.testIntervals=[];
+    const original=window.setInterval.bind(window);
+    window.setInterval=(callback,ms,...args)=>{window.testIntervals.push({callback,ms});return original(callback,ms,...args);};
+    window.voiceState={runtime_ready:true,has_voice:false,recording:false,playing:false,generating:false,reference_text:'Read this passage in your own voice.'};
+    window.__TAURI__={core:{invoke:async(command,args)=>{
+      window.calls.push({command,args});
+      if(command==='environment')return {models:[{path:'/local/parakeet',engine:'parakeet'}],ollama:{available:true,models:['local-model']}};
+      if(command==='voice_status')return {...window.voiceState};
+      if(command==='start_voice_reference')window.voiceState.recording=true;
+      if(command==='finish_voice_reference') {window.voiceState.recording=false;if(window.failSample)throw new Error('No speech detected. Please record your voice again.');window.voiceState.has_voice=true;}
+      if(command==='cancel_voice_reference')window.voiceState.recording=false;
+      if(command==='forget_voice')window.voiceState.has_voice=false;
+      if(command==='speak_suggestion'||command==='preview_voice'){window.voiceState.generating=true;return new Promise((resolve,reject)=>{window.finishSpeaking=()=>{window.voiceState.generating=false;resolve();};window.failSpeaking=()=>{window.voiceState.generating=false;reject(new Error('Voice generation unavailable'));};});}
+      if(command==='stop_voice'){window.voiceState.generating=false;window.voiceState.playing=false;window.finishSpeaking?.();}
+      return null;
+    }},event:{listen:async(_,handler)=>{window.emitCoach=data=>handler({payload:data});}}};
+  });
+  await page.reload();
+  await page.waitForFunction(()=>window.calls.some(c=>c.command==='voice_status'));
+  const count=command=>page.evaluate(cmd=>calls.filter(c=>c.command===cmd).length,command);
+  assert(await count('start_voice_reference')===0 && await count('speak_suggestion')===0 && await count('start_session')===0,'Opening never records a voice, reads aloud, or captures a conversation');
+  assert(await page.locator('#readSuggestion').isDisabled(),'Placeholder reply cannot be read aloud');
+  await page.locator('#settingsToggle').click();
+  assert(await page.locator('#recordVoice').isDisabled(),'Voice enrollment requires its own explicit consent');
+  assert(!(await page.locator('#voiceConsent').isChecked()),'Voice consent starts unchecked');
+  assert(await page.locator('#voiceScript').textContent()==='Read this passage in your own voice.','Enrollment uses the backend reference passage');
+  await page.locator('#voiceConsent').check();await page.locator('#recordVoice').click();
+  assert(await count('start_voice_reference')===1,'Explicit record starts exactly one voice sample');
+  assert(await page.evaluate(()=>calls.find(c=>c.command==='start_voice_reference').args.consent===true),'Voice recording passes consent to the backend');
+  assert(await page.locator('#start').isDisabled(),'Conversation Start is blocked during voice enrollment');
+  assert(await page.locator('#saveVoice').isDisabled(),'A sample shorter than five seconds cannot be saved');
+  assert(await page.locator('#cancelVoice').isEnabled(),'Enrollment can be cancelled immediately');
+  await page.locator('#cancelVoice').click();
+  assert(await count('cancel_voice_reference')===1,'Cancel releases the sample recorder');
+  assert(await page.locator('#start').isEnabled(),'Cancel restores conversation controls');
+  assert(!(await page.locator('#voiceConsent').isChecked()),'Cancel clears voice consent');
+  await page.locator('#voiceConsent').check();await page.locator('#recordVoice').click();
+  await page.waitForTimeout(5100);
+  await page.evaluate(()=>window.testIntervals.filter(i=>i.ms===1000).forEach(i=>i.callback()));
+  await page.locator('#saveVoice').click();
+  assert(await count('finish_voice_reference')===1,'Save commits an explicitly recorded sample');
+  assert(await page.locator('#readSuggestion').isDisabled(),'A saved voice still requires an actual coaching suggestion');
+  assert(await page.locator('#previewVoice').isEnabled(),'Saved voice can be previewed before starting a call');
+  await page.locator('#previewVoice').click();
+  assert(await count('preview_voice')===1,'Preview uses a fixed backend phrase without starting a call');
+  await page.locator('#stopVoice').click();
+  await page.evaluate(()=>window.emitCoach({type:'insight',observation:'Pause briefly.',suggested_response:'I need a moment to think.',confidence:'moderate'}));
+  assert(await page.locator('#readSuggestion').isEnabled(),'A recent real suggestion can be read with the enrolled voice');
+  await page.locator('#readSuggestion').click();
+  await page.waitForFunction(()=>!document.querySelector('#stopVoice').hidden);
+  assert(await count('speak_suggestion')===1,'Reading is always an explicit action');
+  assert(await page.evaluate(()=>Object.keys(calls.find(c=>c.command==='speak_suggestion').args).length===0),'The frontend cannot substitute arbitrary speech text');
+  assert(await page.locator('#start').isDisabled(),'Stopped conversations cannot start during voice generation');
+  assert(await page.locator('#voicePlaybackStatus').textContent().then(s=>s.includes('Preparing')),'Pending generation has visible status');
+  await page.locator('#stopVoice').click();
+  assert(await count('stop_voice')===2,'Stop voice cancels pending playback');
+  assert(await page.locator('#readSuggestion').isEnabled() && await page.locator('#start').isEnabled(),'Stopping restores voice and conversation controls');
+  await page.locator('#readSuggestion').click();await page.evaluate(()=>window.failSpeaking());
+  await page.waitForFunction(()=>document.querySelector('#notice').textContent.includes('Voice generation unavailable'));
+  assert(await page.locator('#readSuggestion').isEnabled(),'Inference failure restores Read aloud');
+  assert(await page.locator('#stopVoice').isHidden(),'Inference failure clears Stop voice');
+  await page.locator('#consent').check();await page.locator('#start').click();
+  assert(await page.locator('#recordVoice').isDisabled(),'An active conversation cannot enroll a voice');
+  assert(await page.locator('#forgetVoice').isDisabled(),'Voice changes stay blocked during a call');
+  assert(await page.locator('#previewVoice').isDisabled(),'Fixed voice preview stays disabled during a call');
+  await page.evaluate(()=>window.emitCoach({type:'insight',observation:'Pause.',suggested_response:'I need a moment.',confidence:'moderate'}));
+  assert(await page.locator('#readSuggestion').isEnabled(),'A fresh suggestion during a call can be read explicitly');
+  await page.locator('#start').click();
+  assert(await page.locator('#readSuggestion').isDisabled(),'Stopping without retention clears the readable suggestion');
+  await page.locator('#forgetVoice').click();
+  assert(await count('forget_voice')===1,'Forget deletes the enrolled voice');
+  assert(await page.locator('#forgetVoice').isHidden(),'Forget removes enrolled state');
+  assert(await page.locator('#readSuggestion').isDisabled(),'Forgotten voice cannot read suggestions');
+  await page.evaluate(()=>window.failSample=true);
+  await page.locator('#voiceConsent').check();await page.locator('#recordVoice').click();await page.waitForTimeout(5100);
+  await page.evaluate(()=>window.testIntervals.filter(i=>i.ms===1000).forEach(i=>i.callback()));await page.locator('#saveVoice').click();
+  await page.waitForFunction(()=>document.querySelector('#notice').textContent.includes('No speech detected'));
+  assert(await page.locator('#start').isEnabled(),'Rejected silent sample restores conversation controls');
+  assert(await page.locator('#saveVoice').isHidden(),'Rejected silent sample closes enrollment');
+  await page.evaluate(()=>{window.voiceState.runtime_ready=false;});
+  await page.reload();await page.waitForFunction(()=>window.calls.some(c=>c.command==='voice_status'));
+  // Test a missing runtime without any installation or download command.
+  await page.evaluate(()=>{window.voiceState.runtime_ready=false;return refreshVoice();});
+  assert(await page.locator('#voiceStatus').textContent().then(s=>s.includes('setup required')),'Missing runtime has clear setup guidance');
+  assert(await page.locator('#recordVoice').isDisabled(),'Missing runtime blocks enrollment');
+  assert(await page.evaluate(()=>calls.every(c=>!c.command.includes('download')&&!c.command.includes('install'))),'The UI never downloads or installs a model');
+  return {passed:results.length,results};
+}

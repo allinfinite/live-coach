@@ -1,0 +1,14 @@
+{
+  "name": "live-coach",
+  "version": "0.1.3",
+  "private": true,
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build --bundles app",
+    "test": "cargo +1.97.0 test --manifest-path src-tauri/Cargo.toml",
+    "build:dev": "tauri build --debug --bundles app"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.10.0"
+  }
+}
