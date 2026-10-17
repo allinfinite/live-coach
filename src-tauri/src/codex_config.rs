@@ -67,6 +67,7 @@ pub fn build_for_auth_scope(
         let value: toml::Value = text
             .parse()
             .map_err(|_| "Cannot parse Codex configuration safely.")?;
+        reject_command_provider_auth(&value)?;
         collect_names(&value, &mut names);
         collect_environment_names(&value, &mut environment_names);
     }
@@ -143,6 +144,16 @@ pub fn build_for_auth_scope(
         Value::Bool(false),
     );
     config.insert("analytics.enabled".into(), Value::Bool(false));
+    for exporter in ["exporter", "trace_exporter", "metrics_exporter"] {
+        config.insert(format!("otel.{exporter}"), json!("none"));
+    }
+    for field in [
+        "log_user_prompt",
+        "log_agent_responses",
+        "log_guardian_assessments",
+    ] {
+        config.insert(format!("otel.{field}"), Value::Bool(false));
+    }
     config.insert("history.persistence".into(), json!("none"));
     // This adapter is intentionally OpenAI-only. Do not execute a configured
     // custom provider authentication command or silently change destination.
@@ -183,6 +194,52 @@ fn collect_names(value: &toml::Value, names: &mut BTreeSet<String>) {
 pub const CHATGPT_CODEX_BASE: &str = "https://chatgpt.com/backend-api/codex";
 pub const OPENAI_API_BASE: &str = "https://api.openai.com/v1";
 const SAFE_PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
+
+fn reject_command_provider_auth(value: &toml::Value) -> Result<(), String> {
+    if value
+        .get("model_providers")
+        .and_then(|v| v.get("openai"))
+        .and_then(|v| v.get("auth"))
+        .is_some()
+    {
+        return Err("A custom OpenAI authentication command is configured. This integration requires Codex-managed authentication.".into());
+    }
+    if let Some(profiles) = value.get("profiles").and_then(toml::Value::as_table) {
+        for profile in profiles.values() {
+            reject_command_provider_auth(profile)?;
+        }
+    }
+    Ok(())
+}
+
+fn verify_provider_telemetry(cfg: &Map<String, Value>) -> Result<(), String> {
+    if cfg
+        .get("model_providers")
+        .and_then(|v| v.get("openai"))
+        .and_then(|v| v.get("auth"))
+        .is_some_and(|v| !v.is_null())
+    {
+        return Err("Codex OpenAI authentication is not isolated.".into());
+    }
+    let otel = cfg
+        .get("otel")
+        .and_then(Value::as_object)
+        .ok_or("Codex telemetry configuration could not be verified.")?;
+    if ["exporter", "trace_exporter", "metrics_exporter"]
+        .iter()
+        .any(|key| otel.get(*key).and_then(Value::as_str) != Some("none"))
+        || [
+            "log_user_prompt",
+            "log_agent_responses",
+            "log_guardian_assessments",
+        ]
+        .iter()
+        .any(|key| otel.get(*key).and_then(Value::as_bool) != Some(false))
+    {
+        return Err("Codex telemetry export was not disabled.".into());
+    }
+    Ok(())
+}
 
 fn collect_environment_names(value: &toml::Value, names: &mut BTreeSet<String>) {
     if let Some(table) = value.as_table() {
@@ -339,6 +396,7 @@ pub fn verify_config(response: &Value) -> Result<(), String> {
             "Codex permission profile grants more access than the reviewed project scope.".into(),
         );
     }
+    verify_provider_telemetry(cfg)?;
     if cfg.get("model_provider").and_then(Value::as_str) != Some("openai") {
         return Err("This integration currently requires the OpenAI Codex provider.".into());
     }
@@ -479,6 +537,7 @@ mod tests {
             "features":{"apps":false,"hooks":false,"plugins":false,"remote_plugin":false},
             "mcp_servers":{},"notify":[],"approval_policy":"on-request","approvals_reviewer":"user",
             "allow_login_shell":false,"shell_environment_policy":{"inherit":"none","experimental_use_profile":false,"set":{"PATH":"/usr/bin:/bin:/usr/sbin:/sbin"}},
+            "otel":{"exporter":"none","trace_exporter":"none","metrics_exporter":"none","log_user_prompt":false,"log_agent_responses":false,"log_guardian_assessments":false},
             "default_permissions":profile,"permissions":{profile:actual},
             "model_provider":"openai","openai_base_url":"https://chatgpt.com/backend-api/codex","chatgpt_base_url":"https://chatgpt.com/backend-api/"
         },"layers":[{"name":{"type":"sessionFlags"}}]});
@@ -528,6 +587,24 @@ mod tests {
                 && !encoded.contains("/bad/path")
         );
         assert!(neutralize_environment(&mut overrides, BTreeSet::from(["a.b".into()])).is_err());
+    }
+    #[test]
+    fn telemetry_and_custom_auth_fail_closed() {
+        let raw: toml::Value = "[model_providers.openai.auth]\ncommand='fixture-auth-command'"
+            .parse()
+            .unwrap();
+        assert!(reject_command_provider_auth(&raw).is_err());
+        let mut cfg=json!({"otel":{"exporter":"none","trace_exporter":"none","metrics_exporter":"none","log_user_prompt":false,"log_agent_responses":false,"log_guardian_assessments":false}}).as_object().unwrap().clone();
+        assert!(verify_provider_telemetry(&cfg).is_ok());
+        cfg["otel"]["trace_exporter"] =
+            json!({"otlp-http":{"endpoint":"https://fixture.invalid","protocol":"binary"}});
+        assert!(verify_provider_telemetry(&cfg).is_err());
+        cfg["otel"]["trace_exporter"] = json!("none");
+        cfg.insert(
+            "model_providers".into(),
+            json!({"openai":{"auth":{"command":"fixture-auth-command"}}}),
+        );
+        assert!(verify_provider_telemetry(&cfg).is_err());
     }
     #[test]
     fn thread_must_acknowledge_exact_profile() {

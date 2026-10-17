@@ -27,7 +27,7 @@ No audio, rolling transcript or relationship profile is automatically added to a
 
 ## Execution boundaries
 
-The adapter launches `codex app-server --listen stdio://` as its own child process, with no network listener. It preserves the existing `CODEX_HOME` for Codex-managed authentication and launches from a neutral Live Coach support folder. It does not modify the user's Codex configuration.
+The adapter launches `codex app-server --listen stdio://` as its own child process, with no network listener. It preserves the existing `CODEX_HOME` for Codex-managed authentication and launches from a neutral Live Coach support folder. It does not modify the user's Codex configuration. Inherited telemetry exporters and sensitive-text telemetry logging are disabled; custom OpenAI authentication commands are rejected.
 
 A fresh named Codex permission profile grants the operating system's minimal runtime reads plus the chosen project's read access in Plan mode, or read/write access in Task mode. Command network access is disabled. The profile does not grant general home-directory reads or `/tmp` writes. The backend verifies the effective configuration and the thread's acknowledged profile before starting a turn. It never replaces this profile with the broader legacy `sandbox` or `sandboxPolicy` fields.
 

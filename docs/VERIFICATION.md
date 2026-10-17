@@ -100,7 +100,7 @@ Public export contains only reviewedsource/docs/assets and passes credential-pat
 
 ## Reviewed Codex handoffs — 0.2.0
 
-66 Rust tests pass; two existing native audio/voice probes remain opt-in. Forty Codex browser assertions and 123 existing UI/voice/warm-up/mode assertions pass. Six legacy handoff-helper tests and 8 voice-engine contract tests pass. Nine real Codex isolation checks exercise project-only reads, denied sibling/Codex-home reads, restricted thread-profile acknowledgment, disabled command networking and absent MCP startup markers.
+67 Rust tests pass; two existing native audio/voice probes remain opt-in. Forty Codex browser assertions and 123 existing UI/voice/warm-up/mode assertions pass. Six legacy handoff-helper tests and 8 voice-engine contract tests pass. Nine real Codex isolation checks exercise project-only reads, denied sibling/Codex-home reads, restricted thread-profile acknowledgment, disabled command networking and absent MCP startup markers.
 
 The actual packaged app-server integration used the existing Codex sign-in and real OpenAI inference in a disposable synthetic project: Plan returned both selected facts; Task created the exact requested result.txt; reused review identifiers were rejected; immediate startup cancellation disconnected cleanly. The installed native app independently completed Connect, file selection, full review, explicit Send, streamed result and Disconnect. Cold startup had zero child processes before Connect and audio remained stopped. Saved voice-profile size/modification metadata and the 26-file Meetily snapshot remain unchanged.
 

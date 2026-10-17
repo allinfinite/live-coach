@@ -20,4 +20,4 @@ Read aloud uses your saved local voice sample. Transcription pauses while it pla
 
 Press Stop. By default, the transcript disappears. If you opted into retention, Delete now removes the transcript and the retention period controls later expiry. Your separately enrolled voice sample remains until Forget voice.
 
-The app currently coaches you. Autonomous conversation participation and Codex task execution are separate future capabilities, not enabled by these settings.
+The app coaches you during conversations. For project tasks, open the separate Codex projects section, select context and review the task before sending it. See [Codex integration](CODEX-INTEGRATION.md). Autonomous conversation participation remains future work.
