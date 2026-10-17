@@ -303,6 +303,16 @@ impl Bridge {
         history_snapshot: Option<String>,
         history_items: Vec<String>,
     ) -> Result<Review, String> {
+        self.prepare_with_origin(project, files, task, model, mode, history_snapshot, history_items, false)
+    }
+    pub fn clear_conversation_review(&self) {
+        self.reviews.lock().unwrap().clear_conversation();
+    }
+    // The Tauri conversation entry point serializes this with Start/Stop/Delete.
+    pub fn prepare_with_origin(
+        &self, project: String, files: Vec<String>, task: String, model: String, mode: Mode,
+        history_snapshot: Option<String>, history_items: Vec<String>, conversation_draft: bool,
+    ) -> Result<Review, String> {
         self.reviews.lock().unwrap().clear();
         self.history_ready()?;
         if !self.models.lock().unwrap().contains(&model) {
@@ -313,7 +323,7 @@ impl Bridge {
             .lock()
             .unwrap()
             .select(history_snapshot.as_deref(), &history_items)?;
-        self.reviews.lock().unwrap().prepare_with_history(
+        self.reviews.lock().unwrap().prepare_with_origin(
             project,
             files,
             task,
@@ -321,6 +331,7 @@ impl Bridge {
             mode,
             PROVIDER.into(),
             history,
+            conversation_draft,
         )
     }
     pub async fn send(self: &Arc<Self>, review_id: &str) -> Result<Value, String> {

@@ -86,6 +86,7 @@ pub enum CoachEvent {
         message: String,
     },
     Transcript {
+        session_id: u64,
         id: String,
         text: String,
         speaker: Option<String>,
@@ -194,6 +195,11 @@ impl Coach {
         state.last_inference = None;
     }
 
+    pub async fn active_session(&self) -> Option<u64> {
+        let state = self.state.lock().await;
+        state.active.then_some(state.session)
+    }
+
     pub async fn transcript(&self) -> Vec<Segment> {
         self.state.lock().await.segments.iter().cloned().collect()
     }
@@ -291,6 +297,7 @@ impl Coach {
             }
         }
         (self.sink)(CoachEvent::Transcript {
+            session_id: state.session,
             id: segment.id.clone(),
             text: segment.text.clone(),
             speaker: segment.speaker.clone(),
@@ -566,6 +573,22 @@ mod tests {
             .iter()
             .filter(|e| matches!(e, CoachEvent::Insight { .. }))
             .count()
+    }
+
+    #[tokio::test]
+    async fn finalized_events_are_bound_to_the_active_conversation() {
+        let (coach, events) = setup();
+        coach.update_settings(CoachSettings { quiet_mode: true, ..Default::default() }).await.unwrap();
+        let token = coach.start(true).await.unwrap();
+        assert_eq!(coach.active_session().await, Some(token));
+        coach.ingest_for_session(token, segment("selected", "Plan a follow-up, but do not execute anything.")).await.unwrap();
+        let event=events.lock().unwrap().iter().find(|e|matches!(e,CoachEvent::Transcript{..})).unwrap().clone();
+        assert_eq!(serde_json::to_value(event).unwrap()["session_id"], token);
+        coach.stop().await; assert_eq!(coach.active_session().await,None);
+        let next=coach.start(true).await.unwrap(); assert_ne!(next,token);
+        assert!(!coach.ingest_for_session(token,segment("old", "Run everything now")).await.unwrap());
+        assert_eq!(coach.active_session().await,Some(next));
+        coach.stop().await;
     }
 
     #[tokio::test]

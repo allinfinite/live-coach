@@ -43,6 +43,7 @@ pub struct Review {
     pub provider: String,
     pub scope: String,
     pub prompt: String,
+    pub conversation_draft: bool,
     #[serde(skip)]
     directory_id: (u64, u64),
 }
@@ -55,6 +56,9 @@ impl Reviews {
     }
     pub fn clear(&mut self) {
         self.pending = None;
+    }
+    pub fn clear_conversation(&mut self) {
+        if self.pending.as_ref().is_some_and(|(r, _)| r.conversation_draft) { self.clear(); }
     }
     pub fn prepare(
         &mut self,
@@ -76,6 +80,13 @@ impl Reviews {
         mode: Mode,
         provider: String,
         history: Vec<crate::codex_history::HistoryContext>,
+    ) -> Result<Review, String> {
+        self.prepare_with_origin(project, files, task, model, mode, provider, history, false)
+    }
+    pub fn prepare_with_origin(
+        &mut self, project: String, files: Vec<String>, task: String, model: String,
+        mode: Mode, provider: String, history: Vec<crate::codex_history::HistoryContext>,
+        conversation_draft: bool,
     ) -> Result<Review, String> {
         self.clear();
         if history.len() > crate::codex_history::MAX_MESSAGES
@@ -131,6 +142,7 @@ impl Reviews {
             provider,
             scope,
             prompt,
+            conversation_draft,
         };
         self.pending = Some((review.clone(), Instant::now()));
         Ok(review)
@@ -377,6 +389,18 @@ mod tests {
             std::env::temp_dir().join(format!("live-coach-context-{}", uuid::Uuid::new_v4()));
         fs::create_dir(&root).unwrap();
         root
+    }
+    #[test]
+    fn clearing_conversation_revokes_only_unsent_spoken_reviews() {
+        let root=fixture(); let mut reviews=Reviews::new();
+        let spoken=reviews.prepare_with_origin(root.display().to_string(),vec![],"Plan the task".into(),"model".into(),Mode::Plan,"provider".into(),vec![],true).unwrap();
+        reviews.clear_conversation(); assert!(reviews.consume(&spoken.review_id).is_err());
+        let manual=reviews.prepare(root.display().to_string(),vec![],"Manual task".into(),"model".into(),Mode::Plan,"provider".into()).unwrap();
+        reviews.clear_conversation(); assert!(reviews.consume(&manual.review_id).is_ok());
+        let spoken=reviews.prepare_with_origin(root.display().to_string(),vec![],"Already reviewed".into(),"model".into(),Mode::Plan,"provider".into(),vec![],true).unwrap();
+        let sent=reviews.consume(&spoken.review_id).unwrap(); reviews.clear_conversation();
+        assert_eq!(sent.task,"Already reviewed"); assert!(sent.conversation_draft);
+        fs::remove_dir_all(root).unwrap();
     }
     #[test]
     fn selected_files_only_and_single_use_review() {

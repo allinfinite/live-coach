@@ -128,3 +128,25 @@ The installed native app passed the actual macOS folder dialog, unselected file 
 Installed bundle and freshly extracted ZIP pass strict deep ad-hoc signature verification. No notarization credentials are available. Meetily's 26-file snapshot and saved voice-profile size/modification metadata remain unchanged. Public export audit covers 74 source files with no credential-pattern or personal-absolute-path findings. Local evidence remains excluded from GitHub.
 
 History is limited to chats exposed by the installed local Codex app-server (tested 0.161.0), with up to 32 plain text messages / 32 KiB per preview and five-minute snapshot expiry. Tool output, attachments and reasoning are excluded. Unsupported history APIs, unavailable project folders and expired context produce recoverable errors; no direct database/rollout fallback is used. Archived history, remote projects and cloud ChatGPT history are not included in this picker.
+
+
+## Deliberate conversation tasks — 0.4.0
+
+74 Rust tests pass; two pre-existing explicit hardware/voice probes remain opt-in. 54 new browser safety checks and all 192 previous UI checks pass. In particular, 120 ordinary, trigger-like, hostile and HTML-containing finalized speech segments produced zero Codex calls. Tests cover no default excerpt selection, editing/length/expiry/eviction, explicit replacement, Plan reset, project/history preservation, review/Send gating, busy tasks, delayed preparation, stopped/deleted sessions and unchanged unrelated drafts/running tasks. Nine actual Codex isolation checks still pass.
+
+Actual installed development executable: synthetic macOS speech -> existing read-only Parakeet model -> quiet Coach finalized transcript with session token -> explicitly prepared review containing selected project file, one owned synthetic Codex history message and selected speech -> real OpenAI streamed Plan. Speech did not connect Codex or trigger an insight. A cleared speech-review token was rejected; the source conversation and project stayed unchanged. Existing context, exact file-write and immediate cancellation probes also passed. The first extended smoke reused an expired history snapshot after another task reconnected; refreshing the owned fixture selection fixed the test, and the installed run passed.
+
+Synthetic recognition included word errors, reinforcing the need to check and edit excerpts. This test does not measure voice identity, live call acoustics or transcription accuracy across speakers. No microphone/system capture was initialized for the speech-to-task fixture test.
+
+Actual native app: consented no-audio simulator -> finalized text -> explicit excerpt picker with none selected -> edit one excerpt -> local draft preserving selected project -> session-bound Plan review. Stop immediately cleared the picker, copied draft and unsent review before Send. Existing user settings were restored afterward. The app is left stopped and Codex disconnected. Ordinary microphone/system capture itself was not re-probed during this UI change.
+
+Stop/Delete/new session revoke pending speech-derived review tokens under the same application lifecycle lock used for conversation preparation. Send consumes its immutable review under the review mutex; an already sent task is not silently canceled by Stop. Session-tagged transcript events prevent delayed prior-session words entering a new picker.
+
+Installed bundle and extracted ZIP pass strict deep ad-hoc signature verification. Developer ID signing/notarization credentials remain unavailable. Meetily's 26-file snapshot and existing voice-profile size/modification metadata remain unchanged. Public source audit covers 77 files with zero credential-pattern or personal-path findings; local evidence and synthetic WAV files stay outside the public export.
+
+Reproduce the opt-in synthetic speech test using a locally installed Parakeet model; it uses Codex account inference but never captures audio:
+
+```sh
+sh scripts/generate-fixture.sh
+./src-tauri/target/debug/live-coach --codex-self-test --speech-fixture /path/to/parakeet-model tests/fixtures/boundary.wav
+```

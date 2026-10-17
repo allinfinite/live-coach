@@ -3,6 +3,7 @@ use crate::{
     codex::{ApprovalDecision, CodexClient, CodexEvent, ConnectOptions},
     codex_bridge::{Bridge, Event},
     codex_config,
+    coach::{Coach, CoachEvent, CoachSettings, Segment},
     project_context::Mode,
 };
 use serde_json::json;
@@ -147,11 +148,59 @@ async fn synthetic_history_fixture(
     }
 }
 
+/// Only the explicit self-test flag may feed a caller-supplied synthetic WAV into
+/// local recognition. This does not initialize microphone or system capture.
+async fn spoken_fixture_if_requested(bridge: &Arc<Bridge>) -> Result<Option<String>, String> {
+    let args = std::env::args().collect::<Vec<_>>();
+    let Some(index) = args.iter().position(|arg| arg == "--speech-fixture") else {
+        return Ok(None);
+    };
+    let model = PathBuf::from(args.get(index + 1).ok_or("--speech-fixture requires MODEL_DIR WAV")?);
+    let wav = PathBuf::from(args.get(index + 2).ok_or("--speech-fixture requires MODEL_DIR WAV")?);
+    if bridge.status().connected { return Err("Speech fixture started with Codex connected".into()); }
+    let lines = tokio::task::spawn_blocking(move || {
+        let mut reader = hound::WavReader::open(wav).map_err(|_| "Could not read synthetic WAV")?;
+        let spec = reader.spec();
+        if spec.channels != 1 || spec.sample_rate == 0 || reader.duration() > spec.sample_rate * 120 {
+            return Err("Speech fixture must be mono and at most 120 seconds".to_owned());
+        }
+        let samples = match spec.sample_format {
+            hound::SampleFormat::Float => reader.samples::<f32>().collect::<Result<Vec<_>, _>>().map_err(|_| "Invalid floating-point WAV")?,
+            hound::SampleFormat::Int => {
+                if !(1..=32).contains(&spec.bits_per_sample) { return Err("Unsupported WAV bit depth".into()); }
+                let scale = 2_f32.powi(i32::from(spec.bits_per_sample) - 1);
+                reader.samples::<i32>().map(|sample| sample.map(|value| value as f32 / scale)).collect::<Result<Vec<_>, _>>().map_err(|_| "Invalid PCM WAV")?
+            }
+        };
+        crate::capture::transcribe_fixture(&model, "parakeet", samples, spec.sample_rate)
+    }).await.map_err(|_| "Synthetic recognition worker failed")??;
+    let recognized = lines.join(" ");
+    let recognized = recognized.trim().chars().take(3000).collect::<String>();
+    if recognized.is_empty() { return Err("Synthetic speech recognition returned no text".into()); }
+    let received = Arc::new(Mutex::new(Vec::new()));
+    let sink = received.clone();
+    let coach = Coach::new(CoachSettings { quiet_mode: true, ..Default::default() }, Arc::new(move |event| sink.lock().unwrap().push(event)));
+    let session = coach.start(true).await?;
+    coach.ingest_for_session(session, Segment { id: "synthetic-spoken-task".into(), text: recognized.clone(), speaker: Some("Fixture channel, identity unverified".into()), timestamp_ms: 0 }).await?;
+    let selected = received.lock().unwrap().iter().find_map(|event| match event {
+        CoachEvent::Transcript { session_id, text, .. } if *session_id == session => Some(text.clone()),
+        _ => None,
+    }).ok_or("Recognized words did not reach the finalized transcript pipeline")?;
+    coach.stop().await;
+    coach.clear().await;
+    if bridge.status().connected || received.lock().unwrap().iter().any(|event| matches!(event, CoachEvent::Insight { .. })) {
+        return Err("Speech unexpectedly initiated analysis or Codex connection".into());
+    }
+    println!("REAL_SPEECH_TRANSCRIPT_PASS codex_connected=false text={selected}");
+    Ok(Some(selected))
+}
+
 async fn verify_history(
     bridge: &Arc<Bridge>,
     events: &Arc<Mutex<Vec<Event>>>,
     project: &Path,
     model: &str,
+    spoken: Option<&str>,
 ) -> Result<(), String> {
     // Real metadata discovery, with no titles, paths, or user content in logs.
     let page = bridge.history_list(None, None, None).await?;
@@ -180,6 +229,31 @@ async fn verify_history(
         let run = bridge.send(&review.review_id).await?;
         let output = wait(bridge, events, run["run_id"].as_str().ok_or("Missing history run ID")?).await?;
         if !output.contains("cobalt-heron-731") { return Err("Selected synthetic history did not affect the streamed answer".into()); }
+        if let Some(spoken) = spoken {
+            // A sent task reconnects the isolated worker and intentionally clears
+            // picker caches. Explicitly browse our owned fixture again rather than
+            // reusing an expired history token from the previous handoff.
+            bridge.history_list(None, None, Some(project.display().to_string())).await?;
+            let spoken_snapshot = bridge.history_read(fixture_id.clone()).await?;
+            let spoken_selected = spoken_snapshot["messages"].as_array().ok_or("Missing refreshed history messages")?.iter().find(|message| message["role"] == "user" && message["text"].as_str().is_some_and(|text| text.contains("cobalt-heron-731"))).ok_or("Synthetic history selection unavailable after refresh")?;
+            let snapshot_id = spoken_snapshot["snapshot_id"].as_str().ok_or("Missing refreshed snapshot ID")?.to_owned();
+            let message_id = spoken_selected["id"].as_str().ok_or("Missing refreshed message ID")?.to_owned();
+            // The self-test explicitly selects its own recognized fixture, project
+            // file and owned history message, then approves this immutable review.
+            let task = format!("Make a one-sentence read-only plan to express this selected request: {spoken}. Use only the selected reference data; use no tools and do not change any files.");
+            let prepare = || bridge.prepare_with_origin(project.display().to_string(), vec!["notes.md".into()], task.clone(), model.to_owned(), Mode::Plan, Some(snapshot_id.clone()), vec![message_id.clone()], true);
+            let discarded = prepare()?;
+            bridge.clear_conversation_review();
+            if bridge.send(&discarded.review_id).await.is_ok() { return Err("Cleared speech review was still sendable".into()); }
+            let review = prepare()?;
+            if !review.conversation_draft || review.history.len() != 1 || review.files.len() != 1 || !review.prompt.contains(spoken) {
+                return Err("Speech, project or history missing from reviewed handoff".into());
+            }
+            let run = bridge.send(&review.review_id).await?;
+            let output = wait(bridge, events, run["run_id"].as_str().ok_or("Missing spoken run ID")?).await?;
+            if output.trim().is_empty() { return Err("Reviewed speech handoff returned no streamed answer".into()); }
+            println!("REAL_SPEECH_PROJECT_HISTORY_REVIEWED_STREAM_PASS output={output}");
+        }
         let after = fixture_client.rpc("thread/items/list", json!({"threadId":fixture_id,"limit":16,"sortDirection":"asc"})).await?;
         if before["data"] != after["data"] { return Err("Source history changed during the fresh handoff".into()); }
         println!("REAL_HISTORY_REVIEWED_STREAM_PASS source_unchanged=true");
@@ -214,6 +288,7 @@ async fn run() -> Result<(), String> {
     let bridge = Bridge::new(Arc::new(move |e| out.lock().unwrap().push(e)));
     let result=async{
   if bridge.status().connected||bridge.send("unreviewed").await.is_ok(){return Err("Unreviewed task was accepted".into());}
+  let spoken = spoken_fixture_if_requested(&bridge).await?;
   let connected=bridge.connect().await?;let models=connected["models"].as_array().ok_or("No Codex model catalog")?;
   let model=models.iter().find(|m|m["is_default"]==true).or_else(||models.first()).and_then(|m|m["id"].as_str()).ok_or("No available Codex models")?.to_owned();println!("CODEX_CONNECTED catalog_count={}",models.len());
   let review=bridge.prepare(project.display().to_string(),vec!["notes.md".into()],"State the two project facts in one short sentence from the selected reference; do not run commands or change files.".into(),model.clone(),Mode::Plan)?;
@@ -222,7 +297,7 @@ async fn run() -> Result<(), String> {
   if bridge.send(&review.review_id).await.is_ok(){return Err("Review token replay was accepted".into());}
   let output=wait(&bridge,&events,id).await?;if !output.to_lowercase().contains("indigo")||!output.to_lowercase().contains("tuesday"){return Err(format!("Context did not reach Codex: {output}"));}
   if std::fs::read_dir(&project).map_err(|e|e.to_string())?.count()!=1{return Err("Plan changed project files".into());}println!("REAL_PLAN_CONTEXT_PASS output={output}");
-  verify_history(&bridge, &events, &project, &model).await?;
+  verify_history(&bridge, &events, &project, &model, spoken.as_deref()).await?;
   let review=bridge.prepare(project.display().to_string(),vec![],"Create result.txt in the chosen project containing exactly REVIEWED_TASK_OK followed by a newline. Use a file change tool. Do not read unrelated files, access the network, or delegate.".into(),model.clone(),Mode::Task)?;
   println!("REVIEWED_TASK target=result.txt mode=task");let run=bridge.send(&review.review_id).await?;wait(&bridge,&events,run["run_id"].as_str().unwrap()).await?;
   if std::fs::read_to_string(project.join("result.txt")).map_err(|_|"Task did not create the requested file")?!="REVIEWED_TASK_OK\n"{return Err("Task file did not match the reviewed task".into());}println!("REAL_PROJECT_WRITE_PASS");

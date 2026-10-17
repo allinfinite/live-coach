@@ -7,6 +7,7 @@
   let connected = false, project = null, review = null, runId = null, busy = false;
   let revision = 0, connection = 0, unlisten = null, pendingEvents = [], sending = false;
   let historySnapshot = null, historyCursor = null, historyRevision = 0;
+  let conversationDraft = false, conversationDraftSession = null, derivedReviewStored = false, derivedPreparing = false;
   const approvals = new Map(), seenApprovals = new Set();
   const scope = () => el('codexMode').value === 'plan'
     ? 'Codex can read the chosen project and propose a plan. Changes are blocked.'
@@ -29,10 +30,39 @@
     el('codexHistoryMore').hidden = !historyCursor;
     el('codexHistoryProjectOnly').disabled = busy || !!runId || !project;
     el('codexScope').textContent = scope();
+    el('codexConversationDraft').hidden = !conversationDraft;
+    el('codexConversationDraft').textContent = conversationDraft
+      ? `Conversation draft · local until you review and send. Check every word.\n${el('codexPrompt').value}` : '';
+    window.dispatchEvent(new CustomEvent('live-coach:codex-draft-status', {detail: {
+      busy: busy || !!runId || sending, hasDraft: !!el('codexPrompt').value.trim(), draftText: el('codexPrompt').value
+    }}));
   }
   function invalidate() {
     revision++; review = null; el('codexReviewText').textContent = ''; render();
   }
+  async function clearDerivedReview() {
+    try { await rpc('codex_clear_review'); }
+    catch (_) { message('Could not clear the pending conversation review. Disconnect Codex before continuing.'); }
+  }
+  window.addEventListener('live-coach:conversation-task-draft', event => {
+    const draft = event.detail;
+    if (!draft || !Number.isSafeInteger(draft.sessionId) || typeof draft.text !== 'string' || !draft.text.trim() || draft.text.length > 4000 || busy || runId || sending) return;
+    if (el('codexPrompt').value.trim() && draft.replace !== true) return;
+    // This event is only dispatched by an intentional click in the local excerpt chooser.
+    conversationDraft = true; conversationDraftSession = draft.sessionId; el('codexPrompt').value = draft.text.trim(); el('codexMode').value = 'plan'; invalidate();
+    el('codexPanel').open = true; el('codexPanel').scrollIntoView({behavior: 'smooth', block: 'nearest'});
+    message(connected ? 'Draft added locally. Check the project and selected history, then review the complete task.' : 'Draft added locally. Connect Codex and choose a project before reviewing.');
+    draft.accepted = true;
+  });
+  window.addEventListener('live-coach:conversation-cleared', () => {
+    const mustClear = derivedReviewStored || derivedPreparing;
+    derivedReviewStored = false;
+    if (conversationDraft) {
+      conversationDraft = false; conversationDraftSession = null; el('codexPrompt').value = ''; invalidate();
+      message(runId ? 'Conversation draft cleared. The task you already sent continues; Cancel task stops it.' : 'Conversation draft and pending review cleared.');
+    }
+    if (mustClear) void clearDerivedReview();
+  });
   const selectedHistory = () => [...el('codexHistoryMessages').querySelectorAll('input:checked')].map(input => input.value);
   function clearHistory() {
     historyRevision++; historySnapshot = null; historyCursor = null;
@@ -179,11 +209,15 @@
   for (const id of ['codexModel','codexMode','codexPrompt']) el(id).addEventListener('input', invalidate);
   for (const id of ['codexModel','codexMode']) el(id).addEventListener('change', invalidate);
   el('codexPrepare').onclick = async () => {
-    invalidate(); const version = revision, generation = connection;
-    busy = true; render();
+    invalidate(); const version = revision, generation = connection, fromConversation = conversationDraft;
+    derivedPreparing = fromConversation; busy = true; render();
     try {
-      const result = await rpc('codex_prepare', {project, files: selected(), task: el('codexPrompt').value.trim(), model: el('codexModel').value, mode: el('codexMode').value, historySnapshot: selectedHistory().length ? historySnapshot : null, historyItems: selectedHistory()});
-      if (version !== revision || generation !== connection || !connected) return;
+      const result = await rpc('codex_prepare', {project, files: selected(), task: el('codexPrompt').value.trim(), model: el('codexModel').value, mode: el('codexMode').value, historySnapshot: selectedHistory().length ? historySnapshot : null, historyItems: selectedHistory(), conversationDraft: fromConversation, conversationSession: fromConversation ? conversationDraftSession : null});
+      if (version !== revision || generation !== connection || !connected) {
+        if (fromConversation) await clearDerivedReview();
+        return;
+      }
+      derivedReviewStored = fromConversation;
       review = result;
       el('codexReviewText').textContent = [
         `Project: ${result.project}`, `Model: ${result.model}`, `Provider: ${result.provider}`,
@@ -193,7 +227,7 @@
         '\nComplete prompt sent to Codex:', result.prompt
       ].join('\n');
       message('Review the task, access and project text before sending.');
-    } catch (e) { error(e); } finally { busy = false; render(); }
+    } catch (e) { error(e); } finally { derivedPreparing = false; busy = false; render(); }
   };
   el('codexSend').onclick = async () => {
     if (!review || busy || runId) return;
@@ -202,7 +236,7 @@
     try {
       const result = await rpc('codex_send', {reviewId: token});
       if (generation !== connection) return;
-      runId = result.run_id; review = null; el('codexRun').hidden = false;
+      runId = result.run_id; review = null; derivedReviewStored = false; el('codexRun').hidden = false;
       sending = false; const events = pendingEvents; pendingEvents = []; events.forEach(event);
       if (runId) message('Task sent to Codex.');
     } catch (e) { review = null; error(e); } finally { sending = false; pendingEvents = []; busy = false; render(); }

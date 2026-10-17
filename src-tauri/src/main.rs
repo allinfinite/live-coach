@@ -115,8 +115,24 @@ async fn codex_prepare(
     mode: project_context::Mode,
     history_snapshot: Option<String>,
     history_items: Option<Vec<String>>,
+    conversation_draft: Option<bool>,
+    conversation_session: Option<u64>,
 ) -> Result<project_context::Review, String> {
-    state.codex.prepare_with_history(project, files, task, model, mode, history_snapshot, history_items.unwrap_or_default())
+    let _conversation = if conversation_draft.unwrap_or(false) {
+        let guard = state.operation.lock().await;
+        if conversation_session.is_none() || state.coach.active_session().await != conversation_session {
+            state.codex.clear_conversation_review();
+            return Err("This conversation ended or changed. Choose your words again before reviewing this draft.".into());
+        }
+        Some(guard)
+    } else { None };
+    state.codex.prepare_with_origin(project, files, task, model, mode, history_snapshot, history_items.unwrap_or_default(), conversation_draft.unwrap_or(false))
+}
+#[tauri::command]
+async fn codex_clear_review(state: tauri::State<'_, Arc<AppState>>) -> Result<(), String> {
+    let _conversation = state.operation.lock().await;
+    state.codex.clear_conversation_review();
+    Ok(())
 }
 #[tauri::command]
 async fn codex_send(
@@ -302,7 +318,7 @@ async fn start_session(
     consent: bool,
     simulation: bool,
     settings: Settings,
-) -> Result<(), String> {
+) -> Result<u64, String> {
     let _op = state.operation.lock().await;
     if state.voice.status().await.recording
         || state.speaking.load(std::sync::atomic::Ordering::SeqCst)
@@ -323,6 +339,7 @@ async fn start_session(
     }
     state.coach.update_settings(settings.coach.clone()).await?;
     state.coach.set_cloud_key(cloud_key()).await;
+    state.codex.clear_conversation_review();
     let token = state.coach.start(consent).await?;
     let mut session = state.session.lock().await;
     session.settings = Some(settings.clone());
@@ -398,13 +415,14 @@ async fn start_session(
             }
         }
     }
-    Ok(())
+    Ok(token)
 }
 async fn stop(state: &AppState) -> Result<(), String> {
     let _op = state.operation.lock().await;
     stop_locked(state).await
 }
 async fn stop_locked(state: &AppState) -> Result<(), String> {
+    state.codex.clear_conversation_review();
     state.voice.stop().await;
     state.voice.cancel_reference().await;
     state.coach.stop().await;
@@ -487,7 +505,7 @@ fn main() {
   let latest_suggestion=Arc::new(std::sync::Mutex::new(None));let sink_suggestion=latest_suggestion.clone();
   let sink:coach::EventSink=Arc::new(move|event|{
    match &event {CoachEvent::Insight{suggested_response,..}=>{*sink_suggestion.lock().unwrap()=Some(suggested_response.clone());},CoachEvent::Stopped=>{*sink_suggestion.lock().unwrap()=None;},_=>{}}
-   if let CoachEvent::Transcript{id,text,speaker,timestamp_ms}=&event {if let Some(segments)=sink_retained.lock().unwrap().as_mut(){if segments.len()>=10000{segments.remove(0);}segments.push(Segment{id:id.clone(),text:text.clone(),speaker:speaker.clone(),timestamp_ms:*timestamp_ms});}}
+   if let CoachEvent::Transcript{id,text,speaker,timestamp_ms,..}=&event {if let Some(segments)=sink_retained.lock().unwrap().as_mut(){if segments.len()>=10000{segments.remove(0);}segments.push(Segment{id:id.clone(),text:text.clone(),speaker:speaker.clone(),timestamp_ms:*timestamp_ms});}}
    let _=handle.emit("coach-event",event);
   });
   let codex=codex_bridge::Bridge::new(Arc::new(move|e|{let _=codex_handle.emit("codex-event",e);}));
@@ -504,7 +522,7 @@ fn main() {
   });
   Ok(())
  })
- .invoke_handler(tauri::generate_handler![codex_status,codex_connect,codex_project,codex_choose_project,codex_history_list,codex_history_read,codex_prepare,codex_send,codex_cancel,codex_approval,codex_disconnect,voice_status,start_voice_reference,finish_voice_reference,cancel_voice_reference,forget_voice,speak_suggestion,preview_voice,stop_voice,environment,warm_ollama,cancel_warmup,start_session,stop_session,quick_action,delete_transcripts,save_api_key,load_history])
+ .invoke_handler(tauri::generate_handler![codex_status,codex_connect,codex_project,codex_choose_project,codex_history_list,codex_history_read,codex_prepare,codex_clear_review,codex_send,codex_cancel,codex_approval,codex_disconnect,voice_status,start_voice_reference,finish_voice_reference,cancel_voice_reference,forget_voice,speak_suggestion,preview_voice,stop_voice,environment,warm_ollama,cancel_warmup,start_session,stop_session,quick_action,delete_transcripts,save_api_key,load_history])
  .on_window_event(|window,event|{if let tauri::WindowEvent::CloseRequested{api,..}=event{api.prevent_close();let state=window.state::<Arc<AppState>>().inner().clone();let handle=window.clone();tauri::async_runtime::spawn(async move{let _=tokio::join!(state.codex.disconnect(),stop(&state));let _=handle.destroy();handle.app_handle().exit(0);});}})
  .build(tauri::generate_context!()).expect("Live Coach failed to launch");
     let quitting = Arc::new(std::sync::atomic::AtomicBool::new(false));

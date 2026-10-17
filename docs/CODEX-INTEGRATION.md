@@ -26,7 +26,7 @@ Live Coach lists and reads local Codex history through the installed app-server 
 
 History previews include user and assistant text only. Tools, command output and private reasoning are excluded. Previews hold up to 32 messages and 32 KiB of text, with 8 KiB per message, and expire after five minutes. A notice identifies truncated previews. Switching context invalidates the task review. A selected history snapshot remains fixed in the final review, even if the original conversation changes. Historical instructions are reference data, never authorization to run commands. Project choices from history can be unavailable if a folder was moved or deleted; use Choose project folder to locate it.
 
-No audio, rolling transcript or relationship profile is automatically added to a handoff. Text from a selected document, transcript or other participant is reference material, never permission to use tools.
+No audio, rolling transcript or relationship profile is automatically added to a handoff. You can deliberately copy selected finalized words through [Draft Codex task](CONVERSATION-TASKS.md), then edit, review and send them. Text from a selected document, transcript or other participant is reference material, never permission to use tools.
 
 ## Execution boundaries
 

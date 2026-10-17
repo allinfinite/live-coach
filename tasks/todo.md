@@ -1,13 +1,13 @@
-# Project and Codex history pickers
+# Deliberate conversation-to-Codex drafts
 
-- [x] Inspect installed history schemas and current review pipeline.
-- [x] Add native folder choice and recent Codex project/history selection without starting turns.
-- [x] Preview selected history messages and freeze only explicitly selected text into the immutable task review.
-- [x] Verify stale selection, bounds, prompt injection boundaries, failures and cancellation.
-- [x] Exercise real history listing/reading and an actual reviewed streaming handoff with synthetic context.
-- [x] Package, install and publish the tested development update; record results.
+- [x] Inspect transcript rendering and immutable Codex review boundaries.
+- [x] Add an explicit local transcript excerpt picker and editable task draft; no voice triggers or automatic inference.
+- [x] Keep selected project/history, prevent silent draft replacement, and default spoken drafts to read-only Plan.
+- [x] Verify ordinary/hostile conversation, stale text, deletion, busy tasks, privacy and review/Send gating.
+- [x] Exercise real finalized transcript ingress and a reviewed streaming handoff using synthetic speech.
+- [ ] Package, install, publish and document the verified update.
 
-Design check-in: Browsing reads local Codex history through app-server, never resumes or changes an existing chat. History text is reference material, not authority. No task starts before the existing explicit review/Send step. Native folder selection does not require typing paths. Recent project choices come from local history metadata, without scanning arbitrary directories. No automatic transcript inclusion. Existing authentication is reused; no new credentials or API keys.
+Design check-in: Ordinary speech is data. Only an intentional button opens the draft picker; only selected words are copied locally. No wake words, speech intent classifiers, automatic Codex connection, task creation or Send. The person reviews/edit words regardless of uncertain speaker identity. Existing selected project/history are reused, with their expiry rules. An existing task draft cannot be silently replaced. Conversation-derived drafts default to Plan; Task access requires an explicit choice. Stopping any conversation, deleting transcripts or starting a new session clears unsent conversation-derived draft context. Nothing automatically speaks to a friend or runs commands.
 
 ## Review
-72 Rust tests pass (two existing native audio/voice probes remain explicit). All 192 browser checks pass: 29 picker, 40 Codex, 123 existing regressions. Nine real Codex isolation checks pass. Installed actual history listing/reading and reviewed history-only inference pass; source conversation unchanged. Owned synthetic fixture archived. Actual native folder selection, review, Send, streamed result, search and Disconnect pass. Capture remains stopped, voice metadata and 26 Meetily files unchanged. Public export audit reports 74 source files, zero findings. Installation and ZIP signature checks pass. Source is pushed on codex/project-history-picker. Verified ZIP and SHA-256 published at https://github.com/allinfinite/live-coach/releases/tag/v0.3.0. App left open with Codex disconnected and capture stopped.
+74 Rust tests (two existing explicit native probes excluded), 54 new safety browser checks and all 192 existing UI checks pass. 120 ordinary/hostile/trigger-like segments produce zero Codex calls. Nine actual Codex isolation checks pass. Installed real synthetic speech recognition and finalized-session ingestion reached a reviewed Plan with selected project/history; actual provider streaming passed, cleared tokens were rejected, source chat unchanged. Native no-audio simulator/excerpt/edit/draft/review/Stop flow passed; Stop immediately removed unsent context. Existing settings restored. Meetily 26-file snapshot and voice metadata unchanged. Source export audit: 77 files, zero findings. Packaging/publication pending final source commit.
