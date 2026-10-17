@@ -115,3 +115,16 @@ Reproduce the controlled real provider test, which uses account inference and cr
 ```
 
 Local verification evidence is excluded from the public repository. Reproducible test code and sanitized test summaries are included.
+
+
+## Project and history pickers — 0.3.0
+
+72 Rust tests pass; two existing explicit audio/voice probes remain opt-in. 29 new picker browser checks, 40 existing Codex checks and 123 conversation/voice/warm-up/mode checks pass. Nine real Codex isolation checks still pass. Browsing starts no audio capture, history resumption or task inference.
+
+The installed development bundle passed actual Codex metadata listing, message reading and selected-history streaming using only an owned synthetic conversation. Its history-only fact reached a newly reviewed Plan; the original conversation items remained identical. Only the owned synthetic source was archived afterward. File-context inference, exact project file creation, single-use review rejection and immediate cancellation also passed. No private user history contents were copied into evidence or source.
+
+The installed native app passed the actual macOS folder dialog, unselected file listing, selected-file review, deliberate Send, streamed response and Disconnect. Explicit native history search returned its expected empty result. Capture consent remained unchecked and the local coach ready. Browser checks additionally cover selecting projects from history, per-message selection, pagination, expiry, stale reads, disconnect/reconnect and clearing private previews.
+
+Installed bundle and freshly extracted ZIP pass strict deep ad-hoc signature verification. No notarization credentials are available. Meetily's 26-file snapshot and saved voice-profile size/modification metadata remain unchanged. Public export audit covers 74 source files with no credential-pattern or personal-absolute-path findings. Local evidence remains excluded from GitHub.
+
+History is limited to chats exposed by the installed local Codex app-server (tested 0.161.0), with up to 32 plain text messages / 32 KiB per preview and five-minute snapshot expiry. Tool output, attachments and reasoning are excluded. Unsupported history APIs, unavailable project folders and expired context produce recoverable errors; no direct database/rollout fallback is used. Archived history, remote projects and cloud ChatGPT history are not included in this picker.

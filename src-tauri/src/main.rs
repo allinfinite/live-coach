@@ -4,6 +4,7 @@ mod coach;
 mod codex;
 mod codex_bridge;
 mod codex_config;
+mod codex_history;
 mod codex_verification;
 mod models;
 mod project_context;
@@ -81,6 +82,30 @@ async fn codex_project(path: String) -> Result<project_context::Project, String>
         .map_err(|_| "Project inspection failed")?
 }
 #[tauri::command]
+async fn codex_choose_project(app: tauri::AppHandle) -> Result<Option<project_context::Project>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog().file().set_title("Choose a project for Codex").set_can_create_directories(false)
+        .pick_folder(move |selection| { let _ = tx.send(selection); });
+    let Some(selection) = rx.await.map_err(|_| "Folder selection ended unexpectedly")? else { return Ok(None); };
+    let path = selection.into_path().map_err(|_| "Choose a local project folder")?;
+    let path = path.to_str().ok_or("Choose a folder with a valid text path")?.to_owned();
+    tokio::task::spawn_blocking(move || project_context::list(&path).map(Some))
+        .await.map_err(|_| "Project inspection failed")?
+}
+#[tauri::command]
+async fn codex_history_list(
+    state: tauri::State<'_, Arc<AppState>>, search: Option<String>, cursor: Option<String>, project: Option<String>,
+) -> Result<serde_json::Value, String> {
+    state.codex.history_list(search, cursor, project).await
+}
+#[tauri::command]
+async fn codex_history_read(
+    state: tauri::State<'_, Arc<AppState>>, thread_id: String,
+) -> Result<serde_json::Value, String> {
+    state.codex.history_read(thread_id).await
+}
+#[tauri::command]
 async fn codex_prepare(
     state: tauri::State<'_, Arc<AppState>>,
     project: String,
@@ -88,8 +113,10 @@ async fn codex_prepare(
     task: String,
     model: String,
     mode: project_context::Mode,
+    history_snapshot: Option<String>,
+    history_items: Option<Vec<String>>,
 ) -> Result<project_context::Review, String> {
-    state.codex.prepare(project, files, task, model, mode)
+    state.codex.prepare_with_history(project, files, task, model, mode, history_snapshot, history_items.unwrap_or_default())
 }
 #[tauri::command]
 async fn codex_send(
@@ -451,6 +478,7 @@ fn main() {
         return;
     }
     let application = tauri::Builder::default()
+ .plugin(tauri_plugin_dialog::init())
  .setup(|app|{
   storage::expire().map_err(std::io::Error::other)?;
   let handle=app.handle().clone();
@@ -476,7 +504,7 @@ fn main() {
   });
   Ok(())
  })
- .invoke_handler(tauri::generate_handler![codex_status,codex_connect,codex_project,codex_prepare,codex_send,codex_cancel,codex_approval,codex_disconnect,voice_status,start_voice_reference,finish_voice_reference,cancel_voice_reference,forget_voice,speak_suggestion,preview_voice,stop_voice,environment,warm_ollama,cancel_warmup,start_session,stop_session,quick_action,delete_transcripts,save_api_key,load_history])
+ .invoke_handler(tauri::generate_handler![codex_status,codex_connect,codex_project,codex_choose_project,codex_history_list,codex_history_read,codex_prepare,codex_send,codex_cancel,codex_approval,codex_disconnect,voice_status,start_voice_reference,finish_voice_reference,cancel_voice_reference,forget_voice,speak_suggestion,preview_voice,stop_voice,environment,warm_ollama,cancel_warmup,start_session,stop_session,quick_action,delete_transcripts,save_api_key,load_history])
  .on_window_event(|window,event|{if let tauri::WindowEvent::CloseRequested{api,..}=event{api.prevent_close();let state=window.state::<Arc<AppState>>().inner().clone();let handle=window.clone();tauri::async_runtime::spawn(async move{let _=tokio::join!(state.codex.disconnect(),stop(&state));let _=handle.destroy();handle.app_handle().exit(0);});}})
  .build(tauri::generate_context!()).expect("Live Coach failed to launch");
     let quitting = Arc::new(std::sync::atomic::AtomicBool::new(false));

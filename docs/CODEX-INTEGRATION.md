@@ -6,10 +6,11 @@ Live Coach can connect to the installed Codex CLI, preview selected project cont
 
 1. Open Codex and sign in, or run `codex login` in Terminal. Live Coach reuses that Codex-managed login without reading or copying authentication files.
 2. Open Live Coach's **Codex projects** section and click **Connect Codex**.
-3. Enter the path of one project folder (`~/Code/my-project` also works) and load its file list. Select only the files needed for the task. Select a model from those returned by your Codex installation.
-4. Choose **Plan** for advice without project changes, or **Task** to let Codex make changes within that project. Describe the desired outcome.
-5. Prepare the review. Read the project, provider, access, complete prompt and selected file contents. Click **Send reviewed task** to begin.
-6. Read the streamed result. If Codex requests approval, inspect the command or proposed change before choosing **Allow once**, **Decline**, or **Cancel task**. An incomplete or truncated approval cannot be accepted.
+3. Click **Choose project folder** to use the macOS folder picker. Alternatively, click **Browse Codex history**, then **Use this project** beside a conversation. Select only the project files needed for the task. Manual path entry remains available as an optional shortcut. Select a model from those returned by your Codex installation.
+4. Optionally search Codex history and click **Preview messages**. Check only the user or assistant messages you want to include; none are selected automatically. The preview is local and does not run or resume a task.
+5. Choose **Plan** for advice without project changes, or **Task** to let Codex make changes within that project. Describe the desired outcome.
+6. Prepare the review. Read the project, provider, access, complete prompt and selected file contents. Click **Send reviewed task** to begin.
+7. Read the streamed result. If Codex requests approval, inspect the command or proposed change before choosing **Allow once**, **Decline**, or **Cancel task**. An incomplete or truncated approval cannot be accepted.
 
 A useful first task is: “Read these project notes and suggest three concrete next steps. Do not change any files.” Use a disposable project for your first Task-mode experiment.
 
@@ -21,7 +22,9 @@ The file chooser lists ordinary project text files and excludes hidden files, sy
 
 The selected files are the **initial prompt context**. Once a reviewed task starts, Codex's sandbox permits reading the chosen project, including files you did not include in that prompt. Select a narrow project folder and review its scope accordingly. Filename exclusions in the initial file list are not a project-wide secret scanner.
 
-Live Coach does not scrape Codex's private SQLite database, rollout files, all project history, screen contents or Dot messages. Existing desktop chats are not resumed or messaged. Each handoff starts a new ephemeral app-server thread. The project folder, explicit task and chosen files provide the context for this version; Codex history selection is future work.
+Live Coach lists and reads local Codex history through the installed app-server protocol. It does not scrape private SQLite databases or rollout files. Browsing never resumes or messages an existing chat. Each handoff starts a new ephemeral thread; only the messages you select are copied into its reviewed prompt. No screen contents or Dot messages are collected. Search covers history available to this local Codex installation, not cloud ChatGPT conversations or projects on another computer.
+
+History previews include user and assistant text only. Tools, command output and private reasoning are excluded. Previews hold up to 32 messages and 32 KiB of text, with 8 KiB per message, and expire after five minutes. A notice identifies truncated previews. Switching context invalidates the task review. A selected history snapshot remains fixed in the final review, even if the original conversation changes. Historical instructions are reference data, never authorization to run commands. Project choices from history can be unavailable if a folder was moved or deleted; use Choose project folder to locate it.
 
 No audio, rolling transcript or relationship profile is automatically added to a handoff. Text from a selected document, transcript or other participant is reference material, never permission to use tools.
 

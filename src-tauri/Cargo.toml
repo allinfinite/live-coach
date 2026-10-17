@@ -1,6 +1,6 @@
 [package]
 name = "live-coach"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 license = "MIT"
 build = "build.rs"
@@ -32,4 +32,5 @@ security-framework = "3"
 hound = "3.5"
 libc = "0.2"
 toml = "0.8"
+tauri-plugin-dialog = "2"
 [dev-dependencies]

@@ -1,4 +1,4 @@
-# Live Coach 0.2.0 — macOS development build
+# Live Coach 0.3.0 — macOS development build
 
 A compact always-on-top conversation coach built from [Meetily Community Edition](https://github.com/Zackriya-Solutions/meetily), pinned at `a2cb62e827da7ef59f65064c97233efb2313878e`. MIT attribution is preserved in LICENSE and ATTRIBUTION.md. This is an independent app, bundle ID `com.dnalevity.livecoach`.
 
@@ -10,7 +10,7 @@ Live Coach is independently maintained; it is not an official Meetily product. S
 
 Personal coach is the default: boundaries, clarity, listening and difficult conversations. Sales coach supports honest discovery and mutually agreed next steps; Assistant secretary helps clarify decisions and commitments. Set “What outcome matters?” and “How do you want to show up?” alongside the relationship context. Existing saved profiles remain compatible.
 
-See [personal coaching guide](docs/PERSONAL-COACH.md). The [Codex integration](docs/CODEX-INTEGRATION.md) connects to your installed, signed-in Codex CLI. Choose a project and context files, write a task, review the exact prompt/model/provider/scope, then choose **Send reviewed task**. Plan is read-only; Task permits project changes. Progress streams into Live Coach, requested approvals need your response, and Cancel interrupts the task. No Codex process or task starts when Live Coach opens. Reviewed Codex context is processed by OpenAI; local Ollama coaching remains a separate choice. Codex 0.161.0 is the tested protocol version. Direct Dot messaging and automatic conversation participation remain future work.
+See [personal coaching guide](docs/PERSONAL-COACH.md). The [Codex integration](docs/CODEX-INTEGRATION.md) connects to your installed, signed-in Codex CLI. Choose a project with the macOS folder picker or from Codex history, select files and individual history messages, write a task, review the exact prompt/model/provider/scope, then choose **Send reviewed task**. Plan is read-only; Task permits project changes. Progress streams into Live Coach, requested approvals need your response, and Cancel interrupts the task. No Codex process or task starts when Live Coach opens. Reviewed Codex context is processed by OpenAI; local Ollama coaching remains a separate choice. Codex 0.161.0 is the tested protocol version. Direct Dot messaging and automatic conversation participation remain future work.
 
 ## Install this build
 

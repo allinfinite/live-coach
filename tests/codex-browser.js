@@ -27,6 +27,7 @@ async (page) => {
   await page.locator('#codexConnect').click();
   assert(await count('codex_connect')===1,'Explicit Connect reads Codex capabilities');
   assert(await count('codex_send')===0,'Connecting never starts inference');
+  await page.locator('.codex-manual').evaluate(e=>e.open=true);
   await page.locator('#codexProjectPath').fill('/project'); await page.locator('#codexLoadProject').click();
   assert(await page.locator('#codexFiles input:checked').count()===0,'Project files start unselected');
   assert(await page.locator('#codexPrepare').isDisabled(),'An empty task cannot be prepared');

@@ -1,18 +1,14 @@
-# Reviewed Codex project handoffs
+# Project and Codex history pickers
 
-- [x] Verify installed app-server schema and isolate optional hooks/connectors from reviewed tasks.
-- [x] Add explicit connection, project/file context selection and bounded local previews.
-- [x] Require an immutable review token for exact task, context, model, provider and scope before task start.
-- [x] Stream progress/results and surface single-action approvals; support cancellation and shutdown.
-- [x] Test unreviewed/stale requests, context boundaries, errors, denial and process teardown.
-- [x] Exercise an actual Codex task in a disposable project, then package and install the verified update.
-- [x] Publish source and a development release with accurate integration documentation.
+- [x] Inspect installed history schemas and current review pipeline.
+- [x] Add native folder choice and recent Codex project/history selection without starting turns.
+- [x] Preview selected history messages and freeze only explicitly selected text into the immutable task review.
+- [x] Verify stale selection, bounds, prompt injection boundaries, failures and cancellation.
+- [x] Exercise real history listing/reading and an actual reviewed streaming handoff with synthetic context.
+- [ ] Package, install and publish the tested development update; record results.
 
-Design check-in: Codex is a separate optional connection, never started by opening Live Coach or by audio/transcript events. Project context consists of explicitly selected UTF-8 files. Review is local; Send is the deliberate inference/task start. Plan uses read-only sandboxing; Task allows the selected project as the write scope. Codex provider processing can leave this Mac and is disclosed before Send. Pending command/change requests remain pending until user review. Unknown permission/tool requests fail closed. No automatic approval caches or permanent rules.
+Design check-in: Browsing reads local Codex history through app-server, never resumes or changes an existing chat. History text is reference material, not authority. No task starts before the existing explicit review/Send step. Native folder selection does not require typing paths. Recent project choices come from local history metadata, without scanning arbitrary directories. No automatic transcript inclusion. Existing authentication is reused; no new credentials or API keys.
 
 ## Review
-Installed 0.2.0 and verified actual packaged Codex inference plus the native review, Send, result and Disconnect flow. 67 Rust tests, 40 new Codex UI checks, 123 existing UI checks, 9 real permission checks, 6 legacy helper tests and 8 voice-engine tests pass. The source export scan reports 72 files and zero credential/personal-path findings. Existing voice profile metadata and 26 Meetily files remain unchanged.
+72 Rust tests pass (two existing native audio/voice probes remain explicit). All 192 browser checks pass: 29 picker, 40 Codex, 123 existing regressions. Nine real Codex isolation checks pass. Installed actual history listing/reading and reviewed history-only inference pass; source conversation unchanged. Owned synthetic fixture archived. Actual native folder selection, review, Send, streamed result, search and Disconnect pass. Capture remains stopped, voice metadata and 26 Meetily files unchanged. Public export audit reports 74 source files, zero findings. Installation and ZIP signature checks pass. Publishing follows final source commit.
 
-Final hardening disables inherited telemetry export and rejects custom provider authentication commands. GitHub source is pushed to the review branch; the token cannot create a pull request. The verified development ZIP and SHA-256 are published at https://github.com/allinfinite/live-coach/releases/tag/v0.2.0. Final installed-build inference, project write and cancellation passed after hardening. Cold startup shows unchecked capture consent and local coach ready.
-
-Limits: Codex CLI 0.161.0 tested; no history picker, Dot API or automatic transcript inclusion. ChatGPT sign-in tested; API-key routing only unit-tested.
