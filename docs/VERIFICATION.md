@@ -87,3 +87,12 @@ The built0.1.2 CLI separately decoded the real synthetic boundary WAV using read
 The installed native0.1.2 window displayed local coach ready, idle timer10:00, conversation consent unchecked, empty transcript, Read aloud disabled and local voice runtime ready for enrollment. No enrolled user voice existed during verification. The user must explicitly record and save their own reference to evaluate resemblance. The optional model is already installed on this Mac; no startup model download or audio capture occurs.
 
 Development app packaging succeeded. Installed app and freshly extracted ZIP pass strict deep signature verification using ad-hoc signing; notarization remains unavailable. Original Meetily snapshot still reports26files andzerochanges. Evidence: `voice-rust-tests-final.log`, `voice-python-tests.log`, `voice-ui-tests.json`, `voice-coaching-regression.log`, `voice-meetily-check.json`, `voice-package.log`, `local-voice/rust-playback-smoke.json`.
+
+
+## Personal coaching expansion — 0.1.3
+
+38 Rust tests pass (2 explicit native probes remain ignored by default);123 browser assertions cover originalUI, warm-up, voice and17mode checks. Six Codex draft-helper tests pass. Mode tests inspect actual HTTP request payloads for Personal/Sales/Secretary, legacy settings defaults, goal/intention bounds and separation of supplied text from system instructions. Two cancellation regressions verify Stop and shutdown invalidate accepted playback before synthesis starts.
+
+Packaged0.1.3 real Parakeet→finalized segment ingress→local Ollama passed:1.15s ASR and2.95s coaching on the synthetic boundary fixture. This test did not capture microphone/system audio. Native startup shows Personal coach, goal/intention fields, local coach ready, stopped capture and the existing enrolled voice ready. Saved voice file size/modification metadata remained unchanged; no private sample was copied into source or evidence. Original Meetily26file snapshot remains unchanged.
+
+Public export contains only reviewedsource/docs/assets and passes credential-pattern and personal-absolute-path checks. No voice profiles, models, recordings, personal transcripts, Codexhistory or local evidence are included. GitHub publication requires repository-creation permission. Dot messaging, automatic call participation and command execution remain unimplemented; the included helper only prepares a local reviewable draft.

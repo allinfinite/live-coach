@@ -1,10 +1,16 @@
-# Live Coach 0.1.2 — macOS development build
+# Live Coach 0.1.3 — macOS development build
 
 A compact always-on-top conversation coach built from [Meetily Community Edition](https://github.com/Zackriya-Solutions/meetily), pinned at `a2cb62e827da7ef59f65064c97233efb2313878e`. MIT attribution is preserved in LICENSE and ATTRIBUTION.md. This is an independent app, bundle ID `com.dnalevity.livecoach`.
 
 ## Community
 
 Live Coach is independently maintained; it is not an official Meetily product. See [contributing](CONTRIBUTING.md), [security reporting](SECURITY.md), and [attribution](ATTRIBUTION.md). Personal coaching is the current priority. Automated call handling and local computer control are future exploration, not current features.
+
+## Coaching modes
+
+Personal coach is the default: boundaries, clarity, listening and difficult conversations. Sales coach supports honest discovery and mutually agreed next steps; Assistant secretary helps clarify decisions and commitments. Set “What outcome matters?” and “How do you want to show up?” alongside the relationship context. Existing saved profiles remain compatible.
+
+See [personal coaching guide](docs/PERSONAL-COACH.md). A [local Codex handoff draft tool](docs/CODEX-INTEGRATION.md) prepares selected project context for review; it does not execute tasks or message Dot.
 
 ## Install this build
 
